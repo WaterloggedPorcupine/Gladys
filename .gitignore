@@ -1,0 +1,17 @@
+# Python build and cache files
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets (API keys go in .env, never commit it)
+.env
+
+# Personal notes and plans kept out of the public repo
+private/
