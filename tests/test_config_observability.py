@@ -1,4 +1,4 @@
-from gladys.config import Settings
+from gladys.config import ModelPrice, Settings
 from gladys.observability import (
     bind_correlation_id,
     configure_logging,
@@ -14,6 +14,18 @@ def test_settings_have_safe_defaults() -> None:
     assert settings.llm.generator_model == "claude-opus-5-5"
     assert settings.auth.require_distinct_approver
     assert settings.database.url.get_secret_value().startswith("postgresql+asyncpg")
+
+
+def test_default_price_table_matches_published_opus_5_5_prices() -> None:
+    prices = Settings(_env_file=None).llm.prices_per_million_tokens
+    assert prices["claude-opus-5-5"] == ModelPrice(
+        input=4.0, output=20.0, cache_read=0.20, cache_write_5m=5.0, cache_write_1h=8.0
+    )
+
+
+def test_every_default_model_has_a_price() -> None:
+    settings = Settings(_env_file=None)
+    assert {settings.llm.generator_model, settings.llm.reviewer_model} <= set(settings.llm.prices_per_million_tokens)
 
 
 def test_correlation_context_and_registry() -> None:

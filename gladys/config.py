@@ -15,14 +15,30 @@ class RedisSettings(BaseModel):
     url: SecretStr = SecretStr("redis://localhost:6379/0")
 
 
+class ModelPrice(BaseModel):
+    """USD per million tokens. Cache reads/writes are billed separately from base input tokens."""
+
+    input: float = Field(ge=0)
+    output: float = Field(ge=0)
+    cache_read: float = Field(ge=0)
+    cache_write_5m: float = Field(ge=0)
+    cache_write_1h: float = Field(ge=0)
+
+
+def _default_prices() -> dict[str, ModelPrice]:
+    # Source: https://platform.claude.com/docs/en/about-claude/pricing ("Model pricing"), checked 2026-09-29.
+    # Note Opus 5.5 cache reads are 0.05x base input, not the usual 0.1x.
+    return {
+        "claude-opus-5-5": ModelPrice(input=4.0, output=20.0, cache_read=0.20, cache_write_5m=5.0, cache_write_1h=8.0),
+    }
+
+
 class LLMSettings(BaseModel):
     generator_model: str = "claude-opus-5-5"
     reviewer_model: str = "claude-opus-5-5"
     generator_effort: str = "high"
     api_key: SecretStr | None = None
-    prices_per_million_tokens: dict[str, dict[str, float]] = Field(
-        default_factory=lambda: {"claude-opus-5-5": {"input": 5.0, "output": 25.0}}
-    )
+    prices_per_million_tokens: dict[str, ModelPrice] = Field(default_factory=_default_prices)
 
 
 class AgentBudgetSettings(BaseModel):
