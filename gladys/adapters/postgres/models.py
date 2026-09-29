@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 class RunRow(Base):
     __tablename__ = "runs"
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     requested_by: Mapped[str] = mapped_column(String, nullable=False)
     lab_profile_id: Mapped[str] = mapped_column(String, nullable=False)
@@ -22,6 +22,12 @@ class RunRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     document: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    __table_args__ = (
+        # Listing a tenant's runs by status, newest first. Also serves any query filtering on tenant_id alone.
+        Index("ix_runs_tenant_id_status_created_at", "tenant_id", "status", "created_at"),
+        # "Every run of this exact protocol."
+        Index("ix_runs_tenant_id_current_protocol_sha256", "tenant_id", "current_protocol_sha256"),
+    )
 
 
 class RunStatusChangeRow(Base):
@@ -68,3 +74,7 @@ class OutboxRow(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        # The Phase 2 relay polls for unpublished events; a partial index stays small as events are published.
+        Index("ix_outbox_unpublished_created_at", "created_at", postgresql_where=text("published_at IS NULL")),
+    )

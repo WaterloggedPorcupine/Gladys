@@ -24,7 +24,8 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("document", postgresql.JSONB(), nullable=False),
     )
-    op.create_index("ix_runs_tenant_id", "runs", ["tenant_id"])
+    op.create_index("ix_runs_tenant_id_status_created_at", "runs", ["tenant_id", "status", "created_at"])
+    op.create_index("ix_runs_tenant_id_current_protocol_sha256", "runs", ["tenant_id", "current_protocol_sha256"])
     op.create_table(
         "run_status_changes",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -64,6 +65,12 @@ def upgrade() -> None:
         sa.Column("published_at", sa.DateTime(timezone=True)),
     )
     op.create_index("ix_outbox_tenant_id", "outbox", ["tenant_id"])
+    op.create_index(
+        "ix_outbox_unpublished_created_at",
+        "outbox",
+        ["created_at"],
+        postgresql_where=sa.text("published_at IS NULL"),
+    )
 
 
 def downgrade() -> None:
