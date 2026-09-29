@@ -7,6 +7,10 @@ class ConcurrencyConflict(RuntimeError):
     pass
 
 
+class RunAlreadyExists(RuntimeError):
+    """``add`` was called with a ``run_id`` that is already stored (in any tenant: run IDs are global)."""
+
+
 class RunRepository(Protocol):
     async def add(self, run: RunRecord) -> None: ...
     async def get(self, tenant_id: str, run_id: str) -> RunRecord | None: ...

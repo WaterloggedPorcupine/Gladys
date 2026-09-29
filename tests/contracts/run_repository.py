@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from gladys.domain.records import ProtocolRevision, Request, RunRecord, RunStatus
-from gladys.ports import ConcurrencyConflict, RunRepository
+from gladys.ports import ConcurrencyConflict, RunAlreadyExists, RunRepository
 
 
 def new_run(tenant_id: str = "tenant-a") -> RunRecord:
@@ -71,3 +71,14 @@ class RunRepositoryContract:
         await repo.save(run, 2)
         assert await repo.get_status_history("tenant-a", run.run_id) == list(run.history)
         assert await repo.get_status_history("tenant-b", run.run_id) == []
+
+    async def test_duplicate_add_raises_run_already_exists(self, repo: RunRepository) -> None:
+        run = new_run()
+        await repo.add(run)
+        with pytest.raises(RunAlreadyExists):
+            await repo.add(run)
+        clash = new_run("tenant-b")
+        clash.run_id = run.run_id
+        with pytest.raises(RunAlreadyExists):
+            await repo.add(clash)
+        assert await repo.get("tenant-b", run.run_id) is None

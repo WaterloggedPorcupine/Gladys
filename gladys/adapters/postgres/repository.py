@@ -2,12 +2,13 @@ from datetime import UTC, datetime
 from typing import cast
 
 from sqlalchemy import func, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gladys.adapters.postgres.models import RunExternalRefRow, RunRow, RunStatusChangeRow
 from gladys.domain.records import RunRecord, StatusChange
-from gladys.ports import ConcurrencyConflict
+from gladys.ports import ConcurrencyConflict, RunAlreadyExists
 
 
 def _status_rows(run: RunRecord, after_seq: int) -> list[dict[str, object]]:
@@ -24,11 +25,11 @@ class PostgresRunRepository:
         self._sessions = sessions
 
     async def add(self, run: RunRecord) -> None:
-        now = datetime.now(UTC)
-        document = run.to_dict()
         async with self._sessions.begin() as session:
-            session.add(
-                RunRow(
+            # ON CONFLICT DO NOTHING + rowcount turns a duplicate into a typed error without parsing IntegrityError.
+            result = await session.execute(
+                pg_insert(RunRow)
+                .values(
                     id=run.run_id,
                     tenant_id=run.tenant_id,
                     status=run.status.value,
@@ -36,12 +37,14 @@ class PostgresRunRepository:
                     lab_profile_id=run.lab_profile_id,
                     current_protocol_sha256=run.protocol.source_sha256 if run.protocol else None,
                     created_at=run.request.submitted_at,
-                    updated_at=now,
+                    updated_at=datetime.now(UTC),
                     version=run.version,
-                    document=document,
+                    document=run.to_dict(),
                 )
+                .on_conflict_do_nothing(index_elements=[RunRow.id])
             )
-            await session.flush()
+            if cast(CursorResult[tuple[object, ...]], result).rowcount != 1:
+                raise RunAlreadyExists(f"run {run.run_id} already exists")
             if rows := _status_rows(run, after_seq=-1):
                 await session.execute(insert(RunStatusChangeRow), rows)
             session.add_all(

@@ -1,7 +1,7 @@
 import copy
 
 from gladys.domain.records import RunRecord, StatusChange
-from gladys.ports import ConcurrencyConflict
+from gladys.ports import ConcurrencyConflict, RunAlreadyExists
 
 
 class InMemoryRunRepository:
@@ -13,8 +13,8 @@ class InMemoryRunRepository:
 
     async def add(self, run: RunRecord) -> None:
         key = (run.tenant_id, run.run_id)
-        if key in self._documents:
-            raise ConcurrencyConflict(f"run {run.run_id} already exists")
+        if any(run_id == run.run_id for _, run_id in self._documents):
+            raise RunAlreadyExists(f"run {run.run_id} already exists")
         self._documents[key] = copy.deepcopy(run.to_dict())
         self._status_log[key] = list(run.history)
 
