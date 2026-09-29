@@ -7,7 +7,7 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    steps: &steps
+    steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true, python-version: "3.12"}
@@ -38,5 +38,14 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with: {enable-cache: true, python-version: "3.12"}
       - run: uv sync --locked --all-groups
-      - run: uv export --locked --no-dev --no-emit-project --format requirements-txt -o requirements-audit.txt
+      - run: uv export --locked --no-dev --all-extras --no-emit-project --format requirements-txt -o requirements-audit.txt
       - run: uv run pip-audit -r requirements-audit.txt
+  core-install:
+    # The package with NO extras and no dev group must still import its core layers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: {enable-cache: true, python-version: "3.12"}
+      - run: uv sync --locked --no-default-groups
+      - run: uv run --no-sync python scripts/check_core_install.py
