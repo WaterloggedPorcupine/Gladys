@@ -36,16 +36,7 @@ T0 = datetime(2026, 9, 28, 9, tzinfo=UTC)
 
 
 def revision(source: str = "source", *, author: str = "agent") -> ProtocolRevision:
-    generation = GenerationInfo("model", "high", "v1", "0.1", "trace", "")
-    generation = GenerationInfo(
-        "model",
-        "high",
-        "v1",
-        "0.1",
-        "trace",
-        ProtocolRevision.from_source(source, "human", "x").source_sha256,
-        T0,
-    )
+    generation = GenerationInfo("model", "high", "v1", "0.1", "trace", sha256_text(source), T0)
     return ProtocolRevision.from_source(
         source, author, "generation", T0, generation=generation if author == "agent" else None
     )

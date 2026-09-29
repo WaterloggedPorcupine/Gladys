@@ -246,9 +246,6 @@ class ProtocolRevision:
         )
 
 
-ProtocolRef = ProtocolRevision
-
-
 class ValidationSeverity(StrEnum):
     ERROR = "error"
     WARNING = "warning"
