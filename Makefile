@@ -11,7 +11,7 @@ test:
 	uv run pytest -m "not integration"
 
 test-integration:
-	uv run pytest -m integration --no-cov
+	GLADYS_REQUIRE_INTEGRATION=1 uv run pytest -m integration --no-cov
 
 fmt:
 	uv run ruff check --fix .

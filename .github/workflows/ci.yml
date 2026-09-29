@@ -23,6 +23,8 @@ jobs:
       - run: uv run pytest -m "not integration"
   integration:
     runs-on: ubuntu-latest
+    env:
+      GLADYS_REQUIRE_INTEGRATION: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
