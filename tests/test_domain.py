@@ -14,6 +14,7 @@ from gladys.domain.records import (
     InvalidTransition,
     LabwarePlacement,
     ProtocolChangedSinceApproval,
+    ProtocolLocked,
     ProtocolRevision,
     Request,
     RunRecord,
@@ -128,6 +129,7 @@ def test_value_objects_and_full_record_round_trip() -> None:
 def test_human_edit_detection_uses_latest_agent_hash() -> None:
     run = record()
     assert not run.human_edited
+    run.transition(RunStatus.GENERATING, "worker", at=T0)
     run.add_protocol_revision(revision("generated"))
     assert not run.human_edited
     run.add_protocol_revision(revision("edited", author="human"))
@@ -230,3 +232,40 @@ def test_random_transition_sequences_preserve_history(states: list[RunStatus]) -
 def test_arbitrary_minimal_records_round_trip(text: str, tenant: str, profile: str) -> None:
     run = RunRecord(Request(text, "user", T0), tenant, profile)
     assert RunRecord.from_dict(run.to_dict()) == run
+
+
+def running() -> RunRecord:
+    run = draft()
+    run.transition(RunStatus.APPROVED, "reviewer", at=T0)
+    run.transition(RunStatus.RUNNING, "operator", at=T0)
+    return run
+
+
+@pytest.mark.parametrize(
+    "prepare",
+    [
+        record,
+        running,
+        lambda: _finish(RunStatus.COMPLETED),
+        lambda: _finish(RunStatus.FAILED),
+        lambda: _abort_draft(),
+    ],
+)
+def test_protocol_is_locked_outside_generating_draft_and_approved(prepare: object) -> None:
+    run = prepare()  # type: ignore[operator]
+    before = (run.status, run.protocol_revisions[:])
+    with pytest.raises(ProtocolLocked):
+        run.add_protocol_revision(revision("late edit", author="human"))
+    assert (run.status, run.protocol_revisions[:]) == before
+
+
+def _finish(status: RunStatus) -> RunRecord:
+    run = running()
+    run.transition(status, "operator", at=T0)
+    return run
+
+
+def _abort_draft() -> RunRecord:
+    run = draft()
+    run.transition(RunStatus.ABORTED, "scientist", at=T0)
+    return run

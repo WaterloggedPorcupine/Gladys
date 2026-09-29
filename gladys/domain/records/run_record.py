@@ -14,12 +14,20 @@ from typing import Any, cast
 SCHEMA_VERSION = "0.3"
 
 
-class InvalidTransition(ValueError):
+class DomainError(ValueError):
+    """Base for violations of the run's rules; ``api/errors.py`` maps these to HTTP responses."""
+
+
+class InvalidTransition(DomainError):
     pass
 
 
 class ProtocolChangedSinceApproval(InvalidTransition):
     pass
+
+
+class ProtocolLocked(DomainError):
+    """The protocol can no longer change: the run is past approval (or never started generating)."""
 
 
 class RunStatus(StrEnum):
@@ -48,6 +56,7 @@ ALLOWED_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
     RunStatus.ABORTED: frozenset(),
 }
 _TERMINAL = {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.ABORTED}
+_PROTOCOL_EDITABLE = {RunStatus.GENERATING, RunStatus.DRAFT, RunStatus.APPROVED}
 
 
 def _now() -> datetime:
@@ -387,6 +396,8 @@ class RunRecord:
         )
 
     def add_protocol_revision(self, revision: ProtocolRevision) -> None:
+        if self.status not in _PROTOCOL_EDITABLE:
+            raise ProtocolLocked(f"cannot revise the protocol of a {self.status.value} run")
         self.protocol_revisions.append(revision)
         self.validations.clear()
         if self.status is RunStatus.APPROVED:
