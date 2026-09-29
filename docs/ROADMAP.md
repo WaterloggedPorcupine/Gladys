@@ -19,26 +19,26 @@ Phase 6  Multi-agent     reviewer agent, kept only if evals show it helps
 **Goal:** a production-shaped skeleton with the domain hardened and persisted, before any LLM work.
 
 ### Tooling
-- [ ] Migrate to `uv`: `pyproject.toml` with dependency groups (`agent`, `api`, `worker`, `ui`, `sim`, `dev`) and a committed `uv.lock`.
-- [ ] Configure `ruff` (lint + format), `mypy --strict`, `import-linter` contracts matching the dependency rule in AGENTS.md, and `pre-commit`.
-- [ ] Add a `Makefile` with `check`, `test`, `test-integration`, `fmt`, `migrate`, `eval`, `eval-live` targets, and document the plain `uv run ...` equivalents in the README, since the developer uses Windows.
-- [ ] Rewrite CI (`.github/workflows/ci.yml`):
+- [x] Migrate to `uv`: `pyproject.toml` with dependency groups (`agent`, `api`, `worker`, `ui`, `sim`, `dev`) and a committed `uv.lock`.
+- [x] Configure `ruff` (lint + format), `mypy --strict`, `import-linter` contracts matching the dependency rule in AGENTS.md, and `pre-commit`.
+- [x] Add a `Makefile` with `check`, `test`, `test-integration`, `fmt`, `migrate`, `eval`, `eval-live` targets, and document the plain `uv run ...` equivalents in the README, since the developer uses Windows.
+- [x] Rewrite CI (`.github/workflows/ci.yml`):
   - Use uv with caching and Python 3.12.
   - Jobs: `lint` (ruff, mypy, import-linter), `unit`, `integration` (testcontainers), `audit` (`pip-audit`).
   - Delete the stray untracked duplicate at `.github/workflows/workflows/`.
-- [ ] Add `gladys/config.py`: `Settings` via pydantic-settings, with nested groups (db, redis, llm, agent budgets, sandbox, auth, observability) and a price table for models. Include `.env.example`.
-- [ ] Add `gladys/observability/`:
+- [x] Add `gladys/config.py`: `Settings` via pydantic-settings, with nested groups (db, redis, llm, agent budgets, sandbox, auth, observability) and a price table for models. Include `.env.example`.
+- [x] Add `gladys/observability/`:
   - structlog JSON configuration
   - a `contextvars` correlation ID
   - Prometheus registry helpers
 
 ### Layout
-- [ ] Restructure to the layout in AGENTS.md. Move `gladys/records` → `gladys/domain/records` and `gladys/validity` → `gladys/domain/validity`, keeping imports working through the new public API.
-- [ ] Add the `gladys/ports/` Protocols: `RunRepository`, `BlobStore`, `Clock`, `IdGenerator` (the others come in later phases).
+- [x] Restructure to the layout in AGENTS.md. Move `gladys/records` → `gladys/domain/records` and `gladys/validity` → `gladys/domain/validity`, keeping imports working through the new public API.
+- [x] Add the `gladys/ports/` Protocols: `RunRepository`, `BlobStore`, `Clock`, `IdGenerator` (the others come in later phases).
 
 ### Domain hardening (changes to the existing `RunRecord`, schema → `0.3`)
-- [ ] **Timezones:** reject naive datetimes in every `__post_init__` that takes a datetime.
-- [ ] **Extended state machine:**
+- [x] **Timezones:** reject naive datetimes in every `__post_init__` that takes a datetime.
+- [x] **Extended state machine:**
   ```
   REQUESTED → GENERATING
   GENERATING → DRAFT | NEEDS_CLARIFICATION | GENERATION_FAILED
@@ -50,33 +50,33 @@ Phase 6  Multi-agent     reviewer agent, kept only if evals show it helps
   ```
   - A new record starts in `REQUESTED`.
   - Keep the existing approval preconditions: a protocol exists and validation passed.
-- [ ] **Approval binding:**
+- [x] **Approval binding:**
   - `StatusChange` gains an optional `protocol_sha256`, which is set on transitions to `APPROVED`.
   - `RUNNING` raises `ProtocolChangedSinceApproval` unless the current hash equals the approved hash.
-- [ ] **Protocol revisions:**
+- [x] **Protocol revisions:**
   - Replace the single `protocol` with an append-only `protocol_revisions: list[ProtocolRevision]`. `protocol` becomes a property returning the latest.
   - Each revision records `source_sha256`, `author` (`"agent"` or a principal), `created_at` and `reason` (generation / human_edit / revision).
   - Adding a revision while the run is `APPROVED` automatically transitions it to `DRAFT` (actor = editor, note = "protocol changed after approval") and clears validation results.
-- [ ] **Generation info:** add a `GenerationInfo` value object (model, effort, prompt_version, gladys_version, trace_id, generated_sha256, generated_at), attached to agent-authored revisions. `human_edited` becomes "latest source hash ≠ latest agent-generated hash".
-- [ ] **New record fields:**
+- [x] **Generation info:** add a `GenerationInfo` value object (model, effort, prompt_version, gladys_version, trace_id, generated_sha256, generated_at), attached to agent-authored revisions. `human_edited` becomes "latest source hash ≠ latest agent-generated hash".
+- [x] **New record fields:**
   - `tenant_id`
   - `lab_profile_id`
   - `clarifications: list[Clarification]` (question, asked_at, answer, answered_by, answered_at)
-- [ ] **Validation results:** `ValidationResult` gains `severity` (`error` / `warning` / `info`) and `source` (`static`, `simulation`, `ai_review`). `validated` means there are no `error`-severity failures and at least one check ran.
-- [ ] **Lab profiles:** add a `LabProfile` value object describing the lab's real hardware: robot model (`OT-2` / `Flex`), mounted pipettes, modules, allowed labware, deck constraints. Generation targets exactly one profile.
-- [ ] **Schema upgrades:** `RunRecord.from_dict` upgrades 0.2 → 0.3 through a chain of pure `upgrade_vX_to_vY(dict) -> dict` functions, each with its own test. Keep the chain so old stored documents always load.
-- [ ] **Property tests:** add hypothesis tests that random valid transition sequences keep the invariants, and that `to_dict`/`from_dict` round-trips for arbitrary records.
+- [x] **Validation results:** `ValidationResult` gains `severity` (`error` / `warning` / `info`) and `source` (`static`, `simulation`, `ai_review`). `validated` means there are no `error`-severity failures and at least one check ran.
+- [x] **Lab profiles:** add a `LabProfile` value object describing the lab's real hardware: robot model (`OT-2` / `Flex`), mounted pipettes, modules, allowed labware, deck constraints. Generation targets exactly one profile.
+- [x] **Schema upgrades:** `RunRecord.from_dict` upgrades 0.2 → 0.3 through a chain of pure `upgrade_vX_to_vY(dict) -> dict` functions, each with its own test. Keep the chain so old stored documents always load.
+- [x] **Property tests:** add hypothesis tests that random valid transition sequences keep the invariants, and that `to_dict`/`from_dict` round-trips for arbitrary records.
 
 ### Persistence
-- [ ] Add the Postgres adapter (SQLAlchemy async) with an Alembic baseline migration:
+- [x] Add the Postgres adapter (SQLAlchemy async) with an Alembic baseline migration:
   - `runs(id, tenant_id, status, requested_by, lab_profile_id, current_protocol_sha256, created_at, updated_at, version, document JSONB)`
   - `run_status_changes`: append-only, indexed `(run_id, at)`
   - `run_external_refs(run_id, tenant_id, system, kind, ext_id)`, with a unique index for lookup "which runs tested idea X"
   - `idempotency_keys(tenant_id, key, request_hash, run_id, created_at)`
   - `outbox(id, tenant_id, topic, payload JSONB, created_at, published_at)`, created now and used in Phase 2
-- [ ] The repository saves with optimistic concurrency (`version`) and raises `ConcurrencyConflict`.
-- [ ] Add `BlobStore`, content-addressed by sha256. Adapters: `InMemoryBlobStore` and `FilesystemBlobStore`; S3 comes later behind the same port. Protocol sources (generated and final) live here, never in the JSON document.
-- [ ] Add contract test suites for `RunRepository` and `BlobStore`, run against the in-memory fakes (unit) and the real adapters (integration).
+- [x] The repository saves with optimistic concurrency (`version`) and raises `ConcurrencyConflict`.
+- [x] Add `BlobStore`, content-addressed by sha256. Adapters: `InMemoryBlobStore` and `FilesystemBlobStore`; S3 comes later behind the same port. Protocol sources (generated and final) live here, never in the JSON document.
+- [x] Add contract test suites for `RunRepository` and `BlobStore`, run against the in-memory fakes (unit) and the real adapters (integration).
 
 **Done when:** `make check` and `make test-integration` pass in CI, the domain coverage threshold is met, and ADRs exist for the layout, the state machine and the persistence model.
 

@@ -2,15 +2,69 @@
 name = "gladys"
 version = "0.1.0"
 description = "An AI lab automation engineer, starting with Opentrons"
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.12,<3.13"
+dependencies = ["alembic>=1.14,<2", "asyncpg>=0.30,<1", "prometheus-client>=0.21,<1", "pydantic-settings>=2.7,<3", "sqlalchemy[asyncio]>=2.0.36,<3", "structlog>=24.4,<26"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+agent = []
+api = []
+worker = []
+ui = []
+sim = []
+dev = ["hypothesis>=6.120,<7", "import-linter>=2.1,<3", "mypy>=1.14,<2", "pip-audit>=2.7,<3", "pre-commit>=4,<5", "pytest>=8.3,<9", "pytest-asyncio>=0.25,<1", "pytest-cov>=6,<7", "ruff>=0.9,<1", "testcontainers[postgres]>=4.9,<5"]
+
+[dependency-groups]
+dev = ["hypothesis>=6.120,<7", "import-linter>=2.1,<3", "mypy>=1.14,<2", "pip-audit>=2.7,<3", "pre-commit>=4,<5", "pytest>=8.3,<9", "pytest-asyncio>=0.25,<1", "pytest-cov>=6,<7", "ruff>=0.9,<1", "testcontainers[postgres]>=4.9,<5"]
+agent = []
+api = []
+worker = []
+ui = []
+sim = []
 
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-include = ["gladys*"]
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["gladys"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --cov=gladys --cov-report=term-missing --cov-fail-under=85"
+testpaths = ["tests"]
+markers = ["integration: requires external infrastructure"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+omit = ["gladys/adapters/postgres/*"]
+
+[tool.importlinter]
+root_package = "gladys"
+
+[[tool.importlinter.contracts]]
+name = "Domain is independent"
+type = "forbidden"
+source_modules = ["gladys.domain"]
+forbidden_modules = ["gladys.ports", "gladys.services", "gladys.agent", "gladys.platforms", "gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]
+
+[[tool.importlinter.contracts]]
+name = "Ports depend only on domain"
+type = "forbidden"
+source_modules = ["gladys.ports"]
+forbidden_modules = ["gladys.services", "gladys.agent", "gladys.platforms", "gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]
+
+[[tool.importlinter.contracts]]
+name = "Application layers are independent of infrastructure"
+type = "forbidden"
+source_modules = ["gladys.services", "gladys.agent", "gladys.platforms"]
+forbidden_modules = ["gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]

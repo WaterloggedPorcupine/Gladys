@@ -1,29 +1,4 @@
-from gladys.records.run_record import (
-    ALLOWED_TRANSITIONS,
-    SCHEMA_VERSION,
-    Consumable,
-    ExternalRef,
-    InvalidTransition,
-    LabwarePlacement,
-    ProtocolRef,
-    Request,
-    RunRecord,
-    RunStatus,
-    StatusChange,
-    ValidationResult,
-)
+"""Backward-compatible imports; prefer :mod:`gladys.domain.records`."""
 
-__all__ = [
-    "ALLOWED_TRANSITIONS",
-    "SCHEMA_VERSION",
-    "Consumable",
-    "ExternalRef",
-    "InvalidTransition",
-    "LabwarePlacement",
-    "ProtocolRef",
-    "Request",
-    "RunRecord",
-    "RunStatus",
-    "StatusChange",
-    "ValidationResult",
-]
+from gladys.domain.records import *  # noqa: F403
+from gladys.domain.records import __all__ as __all__
