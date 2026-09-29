@@ -2,15 +2,102 @@
 name = "gladys"
 version = "0.1.0"
 description = "An AI lab automation engineer, starting with Opentrons"
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.12,<3.13"
+# Core: only what gladys.domain, gladys.ports, gladys.config and gladys.observability import.
+# Infrastructure libraries live in extras, so e.g. the sandbox image never installs a database driver.
+dependencies = ["prometheus-client>=0.21,<1", "pydantic>=2.7,<3", "pydantic-settings>=2.7,<3", "structlog>=24.4,<26"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+postgres = ["alembic>=1.14,<2", "asyncpg>=0.30,<1", "sqlalchemy[asyncio]>=2.0.36,<3"]
+# Filled in by the phase that first needs them (see docs/ROADMAP.md).
+agent = []
+api = []
+worker = []
+ui = []
+sim = []
+
+[dependency-groups]
+# Development installs every adapter so mypy, import-linter and the integration tests see all of the code.
+dev = [
+    "gladys[postgres]",
+    "hypothesis>=6.120,<7",
+    "import-linter>=2.1,<3",
+    "mypy>=1.14,<2",
+    "pip-audit>=2.7,<3",
+    "pre-commit>=4,<5",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+    "pytest-cov>=6,<7",
+    "ruff>=0.9,<1",
+    "testcontainers[postgres]>=4.9,<5",
+]
 
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-include = ["gladys*"]
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["gladys"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --cov=gladys --cov-report=term-missing --cov-fail-under=85"
+testpaths = ["tests"]
+markers = ["integration: requires external infrastructure"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+omit = ["gladys/adapters/postgres/*"]
+
+[tool.importlinter]
+root_package = "gladys"
+
+[[tool.importlinter.contracts]]
+name = "Domain is independent"
+type = "forbidden"
+source_modules = ["gladys.domain"]
+forbidden_modules = ["gladys.ports", "gladys.services", "gladys.agent", "gladys.platforms", "gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]
+
+[[tool.importlinter.contracts]]
+name = "Ports depend only on domain"
+type = "forbidden"
+source_modules = ["gladys.ports"]
+forbidden_modules = ["gladys.services", "gladys.agent", "gladys.platforms", "gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]
+
+[[tool.importlinter.contracts]]
+name = "Application layers are independent of infrastructure"
+type = "forbidden"
+source_modules = ["gladys.services", "gladys.agent", "gladys.platforms"]
+forbidden_modules = ["gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]
+
+[[tool.importlinter.contracts]]
+name = "UI talks only to the API client"
+type = "forbidden"
+source_modules = ["gladys.ui"]
+forbidden_modules = [
+    "gladys.domain",
+    "gladys.ports",
+    "gladys.services",
+    "gladys.agent",
+    "gladys.platforms",
+    "gladys.adapters",
+    "gladys.api",
+    "gladys.worker",
+    "gladys.sandbox",
+    "gladys.config",
+    "gladys.observability",
+    "gladys.records",
+    "gladys.validity",
+]
+# The client may use shared types internally; the UI itself must not reach past it.
+allow_indirect_imports = true

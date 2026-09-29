@@ -1,13 +1,51 @@
 name: CI
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e ".[dev]"
-      - run: pytest
+      - uses: astral-sh/setup-uv@v5
+        with: {enable-cache: true, python-version: "3.12"}
+      - run: uv sync --locked --all-groups
+      - run: uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run lint-imports
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: {enable-cache: true, python-version: "3.12"}
+      - run: uv sync --locked --all-groups
+      - run: uv run pytest -m "not integration"
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      GLADYS_REQUIRE_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: {enable-cache: true, python-version: "3.12"}
+      - run: uv sync --locked --all-groups
+      - run: uv run pytest -m integration --no-cov
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: {enable-cache: true, python-version: "3.12"}
+      - run: uv sync --locked --all-groups
+      - run: uv export --locked --no-dev --all-extras --no-emit-project --format requirements-txt -o requirements-audit.txt
+      - run: uv run pip-audit -r requirements-audit.txt
+  core-install:
+    # The package with NO extras and no dev group must still import its core layers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: {enable-cache: true, python-version: "3.12"}
+      - run: uv sync --locked --no-default-groups
+      - run: uv run --no-sync python scripts/check_core_install.py

@@ -19,26 +19,31 @@ Phase 6  Multi-agent     reviewer agent, kept only if evals show it helps
 **Goal:** a production-shaped skeleton with the domain hardened and persisted, before any LLM work.
 
 ### Tooling
-- [ ] Migrate to `uv`: `pyproject.toml` with dependency groups (`agent`, `api`, `worker`, `ui`, `sim`, `dev`) and a committed `uv.lock`.
-- [ ] Configure `ruff` (lint + format), `mypy --strict`, `import-linter` contracts matching the dependency rule in AGENTS.md, and `pre-commit`.
-- [ ] Add a `Makefile` with `check`, `test`, `test-integration`, `fmt`, `migrate`, `eval`, `eval-live` targets, and document the plain `uv run ...` equivalents in the README, since the developer uses Windows.
-- [ ] Rewrite CI (`.github/workflows/ci.yml`):
+- [x] Migrate to `uv`: `pyproject.toml` with dependency groups (`agent`, `api`, `worker`, `ui`, `sim`, `dev`) and a committed `uv.lock`.
+  - *Review fix:* core dependencies are only what `domain`, `ports`, `config` and `observability` import. SQLAlchemy, asyncpg and Alembic are in a `postgres` extra, which the `dev` group (now defined only under `[dependency-groups]`) pulls in.
+- [x] Configure `ruff` (lint + format), `mypy --strict`, `import-linter` contracts matching the dependency rule in AGENTS.md, and `pre-commit`.
+  - *Review fix:* added the contract that `gladys.ui` imports only `gladys.client`.
+- [x] Add a `Makefile` with `check`, `test`, `test-integration`, `fmt`, `migrate`, `eval`, `eval-live` targets, and document the plain `uv run ...` equivalents in the README, since the developer uses Windows.
+- [x] Rewrite CI (`.github/workflows/ci.yml`):
   - Use uv with caching and Python 3.12.
   - Jobs: `lint` (ruff, mypy, import-linter), `unit`, `integration` (testcontainers), `audit` (`pip-audit`).
+  - *Review fix:* `core-install` installs the package with no extras and imports the core layers. The `integration` job sets `GLADYS_REQUIRE_INTEGRATION=1`, so a missing Docker fails the job instead of skipping it.
   - Delete the stray untracked duplicate at `.github/workflows/workflows/`.
-- [ ] Add `gladys/config.py`: `Settings` via pydantic-settings, with nested groups (db, redis, llm, agent budgets, sandbox, auth, observability) and a price table for models. Include `.env.example`.
-- [ ] Add `gladys/observability/`:
+    - *Review fix:* it was ticked but still existed; now actually deleted.
+- [x] Add `gladys/config.py`: `Settings` via pydantic-settings, with nested groups (db, redis, llm, agent budgets, sandbox, auth, observability) and a price table for models. Include `.env.example`.
+  - *Review fix:* Opus 5.5 prices corrected to $4/$20 per million tokens, and the table now includes cache reads and 5-minute/1-hour cache writes, taken from the Anthropic pricing page.
+- [x] Add `gladys/observability/`:
   - structlog JSON configuration
   - a `contextvars` correlation ID
   - Prometheus registry helpers
 
 ### Layout
-- [ ] Restructure to the layout in AGENTS.md. Move `gladys/records` → `gladys/domain/records` and `gladys/validity` → `gladys/domain/validity`, keeping imports working through the new public API.
-- [ ] Add the `gladys/ports/` Protocols: `RunRepository`, `BlobStore`, `Clock`, `IdGenerator` (the others come in later phases).
+- [x] Restructure to the layout in AGENTS.md. Move `gladys/records` → `gladys/domain/records` and `gladys/validity` → `gladys/domain/validity`, keeping imports working through the new public API.
+- [x] Add the `gladys/ports/` Protocols: `RunRepository`, `BlobStore`, `Clock`, `IdGenerator` (the others come in later phases).
 
-### Domain hardening (changes to the existing `RunRecord`, schema → `0.3`)
-- [ ] **Timezones:** reject naive datetimes in every `__post_init__` that takes a datetime.
-- [ ] **Extended state machine:**
+### Domain hardening (changes to the existing `RunRecord`, schema → `0.3`, then `0.4` after review)
+- [x] **Timezones:** reject naive datetimes in every `__post_init__` that takes a datetime.
+- [x] **Extended state machine:**
   ```
   REQUESTED → GENERATING
   GENERATING → DRAFT | NEEDS_CLARIFICATION | GENERATION_FAILED
@@ -50,33 +55,43 @@ Phase 6  Multi-agent     reviewer agent, kept only if evals show it helps
   ```
   - A new record starts in `REQUESTED`.
   - Keep the existing approval preconditions: a protocol exists and validation passed.
-- [ ] **Approval binding:**
+- [x] **Approval binding:**
   - `StatusChange` gains an optional `protocol_sha256`, which is set on transitions to `APPROVED`.
+  - *Review fix:* `approval` returns `None` once the run goes back to `DRAFT`/`GENERATING`; `approvals` lists every approval ever given, for audit.
   - `RUNNING` raises `ProtocolChangedSinceApproval` unless the current hash equals the approved hash.
-- [ ] **Protocol revisions:**
+- [x] **Protocol revisions:**
   - Replace the single `protocol` with an append-only `protocol_revisions: list[ProtocolRevision]`. `protocol` becomes a property returning the latest.
   - Each revision records `source_sha256`, `author` (`"agent"` or a principal), `created_at` and `reason` (generation / human_edit / revision).
   - Adding a revision while the run is `APPROVED` automatically transitions it to `DRAFT` (actor = editor, note = "protocol changed after approval") and clears validation results.
-- [ ] **Generation info:** add a `GenerationInfo` value object (model, effort, prompt_version, gladys_version, trace_id, generated_sha256, generated_at), attached to agent-authored revisions. `human_edited` becomes "latest source hash ≠ latest agent-generated hash".
-- [ ] **New record fields:**
+  - *Superseded in review (schema 0.4):* validations are no longer cleared. Each `ValidationResult` carries the `protocol_sha256` it checked, and `validated` only considers results for the current revision, so old results stay as history. Revisions are only allowed in `GENERATING`, `DRAFT` and `APPROVED`; anywhere else raises `ProtocolLocked`. Deck layout and parameters now live on each `ProtocolRevision`.
+- [x] **Generation info:** add a `GenerationInfo` value object (model, effort, prompt_version, gladys_version, trace_id, generated_sha256, generated_at), attached to agent-authored revisions. `human_edited` becomes "latest source hash ≠ latest agent-generated hash".
+- [x] **New record fields:**
   - `tenant_id`
   - `lab_profile_id`
   - `clarifications: list[Clarification]` (question, asked_at, answer, answered_by, answered_at)
-- [ ] **Validation results:** `ValidationResult` gains `severity` (`error` / `warning` / `info`) and `source` (`static`, `simulation`, `ai_review`). `validated` means there are no `error`-severity failures and at least one check ran.
-- [ ] **Lab profiles:** add a `LabProfile` value object describing the lab's real hardware: robot model (`OT-2` / `Flex`), mounted pipettes, modules, allowed labware, deck constraints. Generation targets exactly one profile.
-- [ ] **Schema upgrades:** `RunRecord.from_dict` upgrades 0.2 → 0.3 through a chain of pure `upgrade_vX_to_vY(dict) -> dict` functions, each with its own test. Keep the chain so old stored documents always load.
-- [ ] **Property tests:** add hypothesis tests that random valid transition sequences keep the invariants, and that `to_dict`/`from_dict` round-trips for arbitrary records.
+  - *Review fix:* every collection is private and exposed as a read-only tuple. Changes go through aggregate methods: `record_validation`, `add_external_ref`, `record_consumable`, `ask_clarification` (which also moves to `NEEDS_CLARIFICATION`) and `answer_clarification` (only while waiting, once per question).
+- [x] **Validation results:** `ValidationResult` gains `severity` (`error` / `warning` / `info`) and `source` (`static`, `simulation`, `ai_review`). `validated` means there are no `error`-severity failures and at least one check ran.
+- [x] **Lab profiles:** add a `LabProfile` value object describing the lab's real hardware: robot model (`OT-2` / `Flex`), mounted pipettes, modules, allowed labware, deck constraints. Generation targets exactly one profile.
+- [x] **Schema upgrades:** `RunRecord.from_dict` upgrades 0.2 → 0.3 through a chain of pure `upgrade_vX_to_vY(dict) -> dict` functions, each with its own test. Keep the chain so old stored documents always load.
+  - *Review fix:* added `upgrade_v03_to_v04`, which attaches deck, parameters and validations to the latest revision.
+- [x] **Property tests:** add hypothesis tests that random valid transition sequences keep the invariants, and that `to_dict`/`from_dict` round-trips for arbitrary records.
+  - *Review fix:* a `RuleBasedStateMachine` also adds revisions, records passing and failing validations, and handles clarifications. It asserts that it actually reached `APPROVED`, `RUNNING`, `COMPLETED` and a withdrawn approval.
 
 ### Persistence
-- [ ] Add the Postgres adapter (SQLAlchemy async) with an Alembic baseline migration:
+- [x] Add the Postgres adapter (SQLAlchemy async) with an Alembic baseline migration:
   - `runs(id, tenant_id, status, requested_by, lab_profile_id, current_protocol_sha256, created_at, updated_at, version, document JSONB)`
   - `run_status_changes`: append-only, indexed `(run_id, at)`
+    - *Review fix:* a `seq` column (the change's index in history) with unique `(run_id, seq)`. Saves insert only changes past the stored max, and only if there are any.
   - `run_external_refs(run_id, tenant_id, system, kind, ext_id)`, with a unique index for lookup "which runs tested idea X"
   - `idempotency_keys(tenant_id, key, request_hash, run_id, created_at)`
   - `outbox(id, tenant_id, topic, payload JSONB, created_at, published_at)`, created now and used in Phase 2
-- [ ] The repository saves with optimistic concurrency (`version`) and raises `ConcurrencyConflict`.
-- [ ] Add `BlobStore`, content-addressed by sha256. Adapters: `InMemoryBlobStore` and `FilesystemBlobStore`; S3 comes later behind the same port. Protocol sources (generated and final) live here, never in the JSON document.
-- [ ] Add contract test suites for `RunRepository` and `BlobStore`, run against the in-memory fakes (unit) and the real adapters (integration).
+  - *Review fix:* indexes `runs(tenant_id, status, created_at)` and `runs(tenant_id, current_protocol_sha256)`, plus a partial `outbox(created_at) WHERE published_at IS NULL`. `migrations/env.py` reads the URL from `Settings`, not `alembic.ini`.
+- [x] The repository saves with optimistic concurrency (`version`) and raises `ConcurrencyConflict`.
+  - *Review fix:* a duplicate `add()` raises `RunAlreadyExists` from both adapters. External refs added after creation are indexed (`ON CONFLICT DO NOTHING`), and the new `find_by_external_ref` looks them up.
+- [x] Add `BlobStore`, content-addressed by sha256. Adapters: `InMemoryBlobStore` and `FilesystemBlobStore`; S3 comes later behind the same port. Protocol sources (generated and final) live here, never in the JSON document.
+  - *Review fix:* tenant-scoped: `put/get/exists(tenant_id, ...)`, laid out as `root/<tenant_id>/<aa>/<rest>`, with tenant IDs limited to `[A-Za-z0-9_-]{1,64}` and uuid-named temp files for safe concurrent writes.
+- [x] Add contract test suites for `RunRepository` and `BlobStore`, run against the in-memory fakes (unit) and the real adapters (integration).
+  - *Review fix:* the Postgres suite now actually runs. It uses one session-scoped container whose schema is built by `alembic upgrade head`, and it tests that migrations match the models and that `downgrade base` → `upgrade head` works.
 
 **Done when:** `make check` and `make test-integration` pass in CI, the domain coverage threshold is met, and ADRs exist for the layout, the state machine and the persistence model.
 
