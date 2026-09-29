@@ -44,7 +44,7 @@ def upgrade() -> None:
         sa.Column("system", sa.String(), nullable=False),
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("ext_id", sa.String(), nullable=False),
-        sa.UniqueConstraint("tenant_id", "system", "kind", "ext_id", "run_id"),
+        sa.UniqueConstraint("tenant_id", "system", "kind", "ext_id", "run_id", name="uq_run_external_refs_lookup"),
     )
     op.create_table(
         "idempotency_keys",

@@ -1,4 +1,5 @@
 import copy
+from typing import cast
 
 from gladys.domain.records import RunRecord, StatusChange
 from gladys.ports import ConcurrencyConflict, RunAlreadyExists
@@ -34,3 +35,13 @@ class InMemoryRunRepository:
 
     async def get_status_history(self, tenant_id: str, run_id: str) -> list[StatusChange]:
         return list(self._status_log.get((tenant_id, run_id), []))
+
+    async def find_by_external_ref(self, tenant_id: str, system: str, kind: str, ext_id: str) -> list[str]:
+        wanted = {"system": system, "kind": kind, "id": ext_id}
+        matches = [
+            document
+            for (tenant, _), document in self._documents.items()
+            if tenant == tenant_id and wanted in cast(list[dict[str, object]], document["external_refs"])
+        ]
+        matches.sort(key=lambda d: (cast(dict[str, str], d["request"])["submitted_at"], str(d["run_id"])))
+        return [str(d["run_id"]) for d in matches]

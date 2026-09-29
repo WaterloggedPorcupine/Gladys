@@ -46,7 +46,9 @@ class RunExternalRefRow(Base):
     system: Mapped[str] = mapped_column(String, nullable=False)
     kind: Mapped[str] = mapped_column(String, nullable=False)
     ext_id: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (UniqueConstraint("tenant_id", "system", "kind", "ext_id", "run_id"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "system", "kind", "ext_id", "run_id", name="uq_run_external_refs_lookup"),
+    )
 
 
 class IdempotencyKeyRow(Base):

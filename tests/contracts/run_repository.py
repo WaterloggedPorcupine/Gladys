@@ -1,13 +1,13 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from gladys.domain.records import ProtocolRevision, Request, RunRecord, RunStatus
+from gladys.domain.records import ExternalRef, ProtocolRevision, Request, RunRecord, RunStatus
 from gladys.ports import ConcurrencyConflict, RunAlreadyExists, RunRepository
 
 
-def new_run(tenant_id: str = "tenant-a") -> RunRecord:
-    return RunRecord(Request("x", "u", datetime.now(UTC)), tenant_id, "lab")
+def new_run(tenant_id: str = "tenant-a", submitted_at: datetime | None = None) -> RunRecord:
+    return RunRecord(Request("x", "u", submitted_at or datetime.now(UTC)), tenant_id, "lab")
 
 
 async def generating_run(repo: RunRepository) -> RunRecord:
@@ -82,3 +82,24 @@ class RunRepositoryContract:
         with pytest.raises(RunAlreadyExists):
             await repo.add(clash)
         assert await repo.get("tenant-b", run.run_id) is None
+
+    async def test_external_refs_added_after_creation_are_indexed(self, repo: RunRepository) -> None:
+        run = await generating_run(repo)
+        run.add_external_ref(ExternalRef("lims", "idea", "42"))
+        await repo.save(run, 1)
+        await repo.save(run, 2)  # re-saving an already indexed ref is fine
+        assert await repo.find_by_external_ref("tenant-a", "lims", "idea", "42") == [run.run_id]
+        assert await repo.find_by_external_ref("tenant-b", "lims", "idea", "42") == []
+        assert await repo.find_by_external_ref("tenant-a", "lims", "idea", "43") == []
+
+    async def test_find_by_external_ref_returns_every_linked_run_oldest_first(self, repo: RunRepository) -> None:
+        ref = ExternalRef("eln", "experiment", "E-7")
+        earlier = datetime(2026, 9, 1, tzinfo=UTC)
+        # Insert the newer run first so the result order must come from created_at, not insertion order.
+        second, first = new_run(submitted_at=earlier + timedelta(hours=1)), new_run(submitted_at=earlier)
+        await repo.add(second)
+        first.add_external_ref(ref)
+        await repo.add(first)
+        second.add_external_ref(ref)
+        await repo.save(second, 0)
+        assert await repo.find_by_external_ref("tenant-a", "eln", "experiment", "E-7") == [first.run_id, second.run_id]

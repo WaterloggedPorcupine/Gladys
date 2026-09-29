@@ -19,3 +19,7 @@ class RunRepository(Protocol):
     async def get_status_history(self, tenant_id: str, run_id: str) -> list[StatusChange]:
         """The append-only audit rows, in order. Must always equal the stored run's ``history``."""
         ...
+
+    async def find_by_external_ref(self, tenant_id: str, system: str, kind: str, ext_id: str) -> list[str]:
+        """IDs of the tenant's runs linked to that external record (e.g. every run that tested idea X), oldest first."""
+        ...

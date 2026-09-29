@@ -20,6 +20,22 @@ def _status_rows(run: RunRecord, after_seq: int) -> list[dict[str, object]]:
     ]
 
 
+async def _index_external_refs(session: AsyncSession, run: RunRecord) -> None:
+    """Project the run's external refs into run_external_refs; refs already indexed are skipped by the database."""
+    if not run.external_refs:
+        return
+    await session.execute(
+        pg_insert(RunExternalRefRow)
+        .values(
+            [
+                {"run_id": run.run_id, "tenant_id": run.tenant_id, "system": r.system, "kind": r.kind, "ext_id": r.id}
+                for r in run.external_refs
+            ]
+        )
+        .on_conflict_do_nothing(constraint="uq_run_external_refs_lookup")
+    )
+
+
 class PostgresRunRepository:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
@@ -47,18 +63,7 @@ class PostgresRunRepository:
                 raise RunAlreadyExists(f"run {run.run_id} already exists")
             if rows := _status_rows(run, after_seq=-1):
                 await session.execute(insert(RunStatusChangeRow), rows)
-            session.add_all(
-                [
-                    RunExternalRefRow(
-                        run_id=run.run_id,
-                        tenant_id=run.tenant_id,
-                        system=r.system,
-                        kind=r.kind,
-                        ext_id=r.id,
-                    )
-                    for r in run.external_refs
-                ]
-            )
+            await _index_external_refs(session, run)
 
     async def get(self, tenant_id: str, run_id: str) -> RunRecord | None:
         async with self._sessions() as session:
@@ -98,6 +103,7 @@ class PostgresRunRepository:
             # executemany with an empty list would insert one all-NULL row, so only insert when there is something new.
             if rows := _status_rows(run, after_seq=-1 if stored_max_seq is None else stored_max_seq):
                 await session.execute(insert(RunStatusChangeRow), rows)
+            await _index_external_refs(session, run)
         run.version = next_version
 
     async def get_status_history(self, tenant_id: str, run_id: str) -> list[StatusChange]:
@@ -110,3 +116,19 @@ class PostgresRunRepository:
                 )
             )
             return [StatusChange.from_dict(d) for d in documents]
+
+    async def find_by_external_ref(self, tenant_id: str, system: str, kind: str, ext_id: str) -> list[str]:
+        async with self._sessions() as session:
+            ids = await session.scalars(
+                select(RunRow.id)
+                .join(RunExternalRefRow, RunExternalRefRow.run_id == RunRow.id)
+                .where(
+                    RunExternalRefRow.tenant_id == tenant_id,
+                    RunExternalRefRow.system == system,
+                    RunExternalRefRow.kind == kind,
+                    RunExternalRefRow.ext_id == ext_id,
+                    RunRow.tenant_id == tenant_id,
+                )
+                .order_by(RunRow.created_at, RunRow.id)
+            )
+            return list(ids)
