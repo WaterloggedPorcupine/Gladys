@@ -15,3 +15,26 @@ venv/
 
 # Personal notes and plans kept out of the public repo
 private/
+
+# Environment files (keep the committed template)
+.env.*
+!.env.example
+
+# Tool caches and coverage
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Eval run output (reports can include API cost and model output)
+evals/reports/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
