@@ -27,7 +27,7 @@ class BlobStoreContract:
         with pytest.raises(FileNotFoundError):
             await store.get("tenant-b", digest)
 
-    @pytest.mark.parametrize("tenant_id", ["", "../escape", "a/b", "a\b", "..", "t" * 65, "tenant\n", "tenänt"])
+    @pytest.mark.parametrize("tenant_id", ["", "../escape", "a/b", r"a\b", "..", "t" * 65, "tenant\n", "tenänt"])
     async def test_invalid_tenant_id_is_rejected(self, store: BlobStore, tenant_id: str) -> None:
         with pytest.raises(InvalidTenantId):
             await store.put(tenant_id, b"x")
