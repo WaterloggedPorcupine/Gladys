@@ -1,3 +1,5 @@
+"""Alembic environment. The database URL comes from ``gladys.config.Settings`` (``GLADYS_DATABASE__URL``)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -5,19 +7,25 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from gladys.adapters.postgres.models import Base
+from gladys.config import Settings
 
 config = context.config
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 target_metadata = Base.metadata
+
+
+def _database_url() -> str:
+    return Settings().database.url.get_secret_value()
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=config.get_main_option("sqlalchemy.url"),
+        url=_database_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -26,17 +34,16 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 async def run_async_migrations() -> None:
-    engine = async_engine_from_config(
-        config.get_section(config.config_ini_section) or {},
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    engine = create_async_engine(_database_url(), poolclass=pool.NullPool)
     async with engine.connect() as connection:
-        await connection.run_sync(
-            lambda sync_connection: context.configure(connection=sync_connection, target_metadata=target_metadata)
-        )
-        await connection.run_sync(lambda _connection: context.run_migrations())
+        await connection.run_sync(_run_migrations)
     await engine.dispose()
 
 
