@@ -79,3 +79,25 @@ name = "Application layers are independent of infrastructure"
 type = "forbidden"
 source_modules = ["gladys.services", "gladys.agent", "gladys.platforms"]
 forbidden_modules = ["gladys.adapters", "gladys.api", "gladys.worker", "gladys.ui"]
+
+[[tool.importlinter.contracts]]
+name = "UI talks only to the API client"
+type = "forbidden"
+source_modules = ["gladys.ui"]
+forbidden_modules = [
+    "gladys.domain",
+    "gladys.ports",
+    "gladys.services",
+    "gladys.agent",
+    "gladys.platforms",
+    "gladys.adapters",
+    "gladys.api",
+    "gladys.worker",
+    "gladys.sandbox",
+    "gladys.config",
+    "gladys.observability",
+    "gladys.records",
+    "gladys.validity",
+]
+# The client may use shared types internally; the UI itself must not reach past it.
+allow_indirect_imports = true

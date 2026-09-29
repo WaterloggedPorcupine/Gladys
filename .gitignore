@@ -23,6 +23,8 @@ private/
 # Tool caches and coverage
 .mypy_cache/
 .ruff_cache/
+.uv-cache/
+.import_linter_cache/
 .hypothesis/
 .coverage
 .coverage.*
