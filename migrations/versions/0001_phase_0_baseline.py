@@ -30,8 +30,10 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("run_id", sa.String(), sa.ForeignKey("runs.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("tenant_id", sa.String(), nullable=False),
+        sa.Column("seq", sa.Integer(), nullable=False),
         sa.Column("at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("document", postgresql.JSONB(), nullable=False),
+        sa.UniqueConstraint("run_id", "seq", name="uq_run_status_changes_run_id_seq"),
     )
     op.create_index("ix_run_status_changes_run_id_at", "run_status_changes", ["run_id", "at"])
     op.create_table(

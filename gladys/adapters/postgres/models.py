@@ -29,9 +29,13 @@ class RunStatusChangeRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="RESTRICT"), nullable=False)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)  # index of this change in the run's history
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     document: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    __table_args__ = (Index("ix_run_status_changes_run_id_at", "run_id", "at"),)
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_run_status_changes_run_id_seq"),
+        Index("ix_run_status_changes_run_id_at", "run_id", "at"),
+    )
 
 
 class RunExternalRefRow(Base):

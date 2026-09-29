@@ -6,8 +6,17 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gladys.adapters.postgres.models import RunExternalRefRow, RunRow, RunStatusChangeRow
-from gladys.domain.records import RunRecord
+from gladys.domain.records import RunRecord, StatusChange
 from gladys.ports import ConcurrencyConflict
+
+
+def _status_rows(run: RunRecord, after_seq: int) -> list[dict[str, object]]:
+    """Rows for history entries whose index (``seq``) is greater than ``after_seq``."""
+    return [
+        {"run_id": run.run_id, "tenant_id": run.tenant_id, "seq": seq, "at": change.at, "document": change.to_dict()}
+        for seq, change in enumerate(run.history)
+        if seq > after_seq
+    ]
 
 
 class PostgresRunRepository:
@@ -32,12 +41,9 @@ class PostgresRunRepository:
                     document=document,
                 )
             )
-            session.add_all(
-                [
-                    RunStatusChangeRow(run_id=run.run_id, tenant_id=run.tenant_id, at=h.at, document=h.to_dict())
-                    for h in run.history
-                ]
-            )
+            await session.flush()
+            if rows := _status_rows(run, after_seq=-1):
+                await session.execute(insert(RunStatusChangeRow), rows)
             session.add_all(
                 [
                     RunExternalRefRow(
@@ -80,25 +86,24 @@ class PostgresRunRepository:
             )
             if cast(CursorResult[tuple[object, ...]], result).rowcount != 1:
                 raise ConcurrencyConflict(f"run {run.run_id} was concurrently modified")
-            existing_count = await session.scalar(
-                select(func.count())
-                .select_from(RunStatusChangeRow)
-                .where(
+            stored_max_seq = await session.scalar(
+                select(func.max(RunStatusChangeRow.seq)).where(
                     RunStatusChangeRow.tenant_id == run.tenant_id,
                     RunStatusChangeRow.run_id == run.run_id,
                 )
             )
-            offset = existing_count or 0
-            await session.execute(
-                insert(RunStatusChangeRow),
-                [
-                    {
-                        "run_id": run.run_id,
-                        "tenant_id": run.tenant_id,
-                        "at": h.at,
-                        "document": h.to_dict(),
-                    }
-                    for h in run.history[offset:]
-                ],
-            )
+            # executemany with an empty list would insert one all-NULL row, so only insert when there is something new.
+            if rows := _status_rows(run, after_seq=-1 if stored_max_seq is None else stored_max_seq):
+                await session.execute(insert(RunStatusChangeRow), rows)
         run.version = next_version
+
+    async def get_status_history(self, tenant_id: str, run_id: str) -> list[StatusChange]:
+        async with self._sessions() as session:
+            documents: list[dict[str, object]] = list(
+                await session.scalars(
+                    select(RunStatusChangeRow.document)
+                    .where(RunStatusChangeRow.tenant_id == tenant_id, RunStatusChangeRow.run_id == run_id)
+                    .order_by(RunStatusChangeRow.seq)
+                )
+            )
+            return [StatusChange.from_dict(d) for d in documents]
