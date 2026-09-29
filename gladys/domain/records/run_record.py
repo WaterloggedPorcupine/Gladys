@@ -431,8 +431,15 @@ class RunRecord:
         return next((c for c in reversed(self.history) if c.to_status in statuses), None)
 
     @property
+    def approvals(self) -> tuple[StatusChange, ...]:
+        """Every approval ever given, including withdrawn ones (for audit)."""
+        return tuple(c for c in self.history if c.to_status is RunStatus.APPROVED)
+
+    @property
     def approval(self) -> StatusChange | None:
-        return self._last_change_to({RunStatus.APPROVED})
+        """The approval currently in force: the latest one, unless the run later went back to DRAFT or GENERATING."""
+        latest = self._last_change_to({RunStatus.APPROVED, RunStatus.DRAFT, RunStatus.GENERATING})
+        return latest if latest is not None and latest.to_status is RunStatus.APPROVED else None
 
     @property
     def started_at(self) -> datetime | None:

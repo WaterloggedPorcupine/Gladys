@@ -269,3 +269,22 @@ def _abort_draft() -> RunRecord:
     run = draft()
     run.transition(RunStatus.ABORTED, "scientist", at=T0)
     return run
+
+
+def test_withdrawn_approval_is_not_current_but_stays_auditable() -> None:
+    run = draft()
+    first = run.transition(RunStatus.APPROVED, "reviewer", at=T0)
+    assert run.approval == first
+    run.add_protocol_revision(revision("edited", author="human"))
+    assert run.status is RunStatus.DRAFT
+    assert run.approval is None
+    assert run.approvals == (first,)
+    run.transition(RunStatus.GENERATING, "scientist", at=T0)
+    assert run.approval is None
+
+
+def test_approval_survives_running_and_completion() -> None:
+    run = running()
+    approval = run.approvals[-1]
+    run.transition(RunStatus.COMPLETED, "operator", at=T0)
+    assert run.approval == approval
